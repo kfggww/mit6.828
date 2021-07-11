@@ -4,7 +4,12 @@
 # error "This is a JOS kernel header; user programs should not #include it"
 #endif
 
-struct Trapframe;
+// 保存函数调用的栈桢
+struct Trapframe {
+	int ebp;
+	int eip;
+	int args[4];
+};
 
 // Activate the kernel monitor,
 // optionally providing a trap frame indicating the current state
