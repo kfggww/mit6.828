@@ -23,7 +23,9 @@
 		      "movl %%eax, %4\n\t"        \
 		      "movl 20(%%ebp), %%eax\n\t" \
 		      "movl %%eax, %5"            \
-		      :"=m"((tf).ebp), "=m"((tf).eip), "=m"((tf).args[0]), "=m"((tf).args[1]), "=m"((tf).args[2]), "=m"((tf).args[3]) \
+		      :"=m"((tf).tf_regs.reg_ebp), "=m"((tf).tf_eip),	\
+		       "=m"((tf).tf_regs.reg_eax), "=m"((tf).tf_regs.reg_ebx), \
+		       "=m"((tf).tf_regs.reg_ecx), "=m"((tf).tf_regs.reg_edx)	\
 		      : \
 		      :"%eax" \
 		);
