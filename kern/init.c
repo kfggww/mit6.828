@@ -11,6 +11,38 @@
 #include <kern/env.h>
 #include <kern/trap.h>
 
+#define GET_TF(tf)				  \
+	asm volatile ("movl %%ebp, %0\n\t"        \
+		      "movl 4(%%ebp), %%eax\n\t"  \
+		      "movl %%eax, %1\n\t"        \
+		      "movl 8(%%ebp), %%eax\n\t"  \
+		      "movl %%eax, %2\n\t"        \
+		      "movl 12(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %3\n\t"        \
+		      "movl 16(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %4\n\t"        \
+		      "movl 20(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %5"            \
+		      :"=m"((tf).ebp), "=m"((tf).eip), "=m"((tf).args[0]), "=m"((tf).args[1]), "=m"((tf).args[2]), "=m"((tf).args[3]) \
+		      : \
+		      :"%eax" \
+		);
+
+
+
+// Test the stack backtrace function (lab 1 only)
+void
+test_backtrace(int x)
+{
+	// 获取栈桢
+	struct Trapframe tf;
+	GET_TF(tf);
+	if (x > 0)
+		test_backtrace(x-1);
+	else
+		mon_backtrace(0, 0, &tf);
+	mon_backtrace(0, 0, &tf);
+}
 
 void
 i386_init(void)
@@ -30,6 +62,12 @@ i386_init(void)
 
 	// Lab 2 memory management initialization functions
 	mem_init();
+	// Test the stack backtrace function (lab 1 only)
+	test_backtrace(5);
+	// 记录i386_init栈桢结构
+	struct Trapframe tf;
+	GET_TF(tf);
+	mon_backtrace(0, 0, &tf);
 
 	// Lab 3 user environment initialization functions
 	env_init();
