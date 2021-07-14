@@ -116,6 +116,14 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
+	// NOTE: env_free_list按照envs数组的下标递增的顺序组织
+	env_free_list = NULL;
+	for(int i = NENV - 1; i >= 0; --i) {
+		envs[i].env_link = env_free_list;
+		envs[i].env_id = 0;
+		envs[i].env_pgdir = NULL;
+		env_free_list = &envs[i];
+	}
 
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -179,6 +187,13 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	// NOTE: 在env的虚拟地址空间, 初始化属于内核的部分
+	// TODO: 能保证这个物理页面p一定能映射到内核的虚拟空间上吗? 目前假设可以吧:-)
+	pde_t *env_pgdir = page2kva(p);
+	for(int i = PDX(UTOP); i < PDX(0xffffffff); ++i)
+		env_pgdir[i] = kern_pgdir[i];
+	p->pp_ref += 1;
+	e->env_pgdir = env_pgdir;
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -262,11 +277,25 @@ region_alloc(struct Env *e, void *va, size_t len)
 {
 	// LAB 3: Your code here.
 	// (But only if you need it for load_icode.)
-	//
+	// NOTE: 给[va, va + len)区间内的虚拟内存分配物理内存
+	va = ROUNDDOWN(va, PGSIZE);
+	void *va_end = ROUNDUP(va + len, PGSIZE);
+	for(; va < va_end; va += PGSIZE) {
+		pte_t *pte = pgdir_walk(e->env_pgdir, va, 0);
+
+		// NOTE: 这里如果不先判空而直接对指针解引用是会导致崩溃的, 因为如果pte == NULL,
+		// 但0地址在当前虚拟地址空间还没有映射, 会产生缺页异常, 但内核此时还没有设置IDT
+		if(pte == NULL || (*pte & PTE_P) == 0) {
+			struct PageInfo *pp = page_alloc(ALLOC_ZERO);
+			if(page_insert(e->env_pgdir, pp, va, PTE_U | PTE_W) < 0)
+				panic("Failed to call region_alloc");
+		}
+	}
 	// Hint: It is easier to use region_alloc if the caller can pass
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	//   TODO: 还有什么边界情况吗???
 }
 
 //
@@ -322,12 +351,39 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
 
+	// NOTE: 内核映像文件中已经包含可执行文件的内容, binary指针就是该ELF文件在
+	// 内核虚拟内存中的位置, 也就是ELF header的指针, 按照ELF文件格式读取到进程的
+	// 虚拟内存空间即可
 	// LAB 3: Your code here.
 
+	// 先加载env的页表
+	lcr3(PADDR(e->env_pgdir));
+	struct Elf *elf_header = (struct Elf *)binary;
+	struct Proghdr *ph = (struct Proghdr *)(binary + elf_header->e_phoff);
+
+	// NOTE: 必须设置env开始执行的地址
+	e->env_tf.tf_eip = elf_header->e_entry;
+
+	// 循环读取Segment, 并加载到env的内存空间
+	for(int i = 0; i < elf_header->e_phnum; ++i) {
+		if(ph->p_type != ELF_PROG_LOAD) {
+			ph++;
+			continue;
+		}
+		region_alloc(e, (void*)(ph->p_va), ph->p_memsz); //在env的虚拟地址空间中分配空间
+		memcpy((void*)(ph->p_va), (void*)(binary+ph->p_offset), ph->p_filesz);
+		memset((void*)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+		ph++;
+	}
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
+	struct PageInfo *pp = page_alloc(ALLOC_ZERO);
+	if(pp == NULL)
+		panic("Failed to alloc memory for env!\n");
+	if(page_insert(e->env_pgdir, pp, (void*)(USTACKTOP - PGSIZE), PTE_U | PTE_W) < 0)
+		panic("Failed to map stack at virtual address of env!\n");
 }
 
 //
@@ -341,6 +397,12 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env *env = NULL;
+	if(env_alloc(&env, 0) < 0)
+		panic("Failed to call env_create()!\n");
+
+	load_icode(env, binary);
+	env->env_type = type;
 }
 
 //
@@ -458,6 +520,22 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 
-	panic("env_run not yet implemented");
+	/* if(e == curenv || e == NULL) */
+	/* 	goto over; */
+
+	if(curenv == NULL) {
+		curenv = e;
+		env_pop_tf(&curenv->env_tf);
+	}
+
+	curenv->env_status = ENV_RUNNABLE;
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs += 1; // TODO: 这里是加1处理吗???
+	lcr3(PADDR(e->env_pgdir));
+
+	// 通过模拟iret切换到用户态执行
+	env_pop_tf(&e->env_tf);
+	// panic("env_run not yet implemented");
 }
 

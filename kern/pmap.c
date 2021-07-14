@@ -177,6 +177,7 @@ mem_init(void)
 	// memory management will go through the page_* functions. In
 	// particular, we can now map memory using boot_map_region
 	// or page_insert
+	// NOTE: 在分配完pages和envs需要的页面之后对page_free_list进行初始化
 	page_init();
 
 	check_page_free_list(1);
@@ -286,7 +287,7 @@ page_init(void)
 	// free pages!
 	size_t i;
 	const size_t used_start = ((IOPHYSMEM >> 12));
-	const size_t used_end = (PADDR(pages + npages - 1) >> 12);
+	const size_t used_end = (PADDR(boot_alloc(0) - 1) >> 12); // 通过调用boot_alloc(0)获取nextfree
 	for (i = 0; i < npages; i++) {
 		// 已经使用的物理页面
 		if(i == 0 || (i >= used_start && i <= used_end)) {
