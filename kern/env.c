@@ -525,6 +525,9 @@ env_run(struct Env *e)
 
 	if(curenv == NULL) {
 		curenv = e;
+		curenv->env_status = ENV_RUNNING;
+		// env_pop_tf会从内核态进入用户态执行当前env, 所以在此之前
+		// 需要设置env的状态为ENV_RUNNING
 		env_pop_tf(&curenv->env_tf);
 	}
 
