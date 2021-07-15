@@ -356,7 +356,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	// 虚拟内存空间即可
 	// LAB 3: Your code here.
 
-	// 先加载env的页表
+	// TODO: 这里加载进程的页表有问题吗???
 	lcr3(PADDR(e->env_pgdir));
 	struct Elf *elf_header = (struct Elf *)binary;
 	struct Proghdr *ph = (struct Proghdr *)(binary + elf_header->e_phoff);

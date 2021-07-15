@@ -25,6 +25,50 @@ struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+// NOTE: 记录以下干过的蠢事: 之前这里声明了一堆没有初始化的函数指针, 然后写到了idt里, 结果
+// 就是在应用程序触发中断的时候总是提示不能访问某某地址, 这个地址自然就是CPU从idt中读取的打算
+// 作为中断处理函数的地址了, 因为地址的值是错的, 所以就死机了:P
+
+void divide_handler(void);
+
+void debug_handler(void);
+
+void nmi_handler(void);
+
+void brkpt_handler(void);
+
+void oflow_handler(void);
+
+void bound_handler(void);
+
+void illop_handler(void);
+
+void device_handler(void);
+
+void dblflt_handler(void);
+
+void tss_handler(void);
+
+void segnp_handler(void);
+
+void stack_handler(void);
+
+void gpflt_handler(void);
+
+void pgflt_handler(void);
+
+void fperr_handler(void);
+
+void align_handler(void);
+
+void mchk_handler(void);
+
+void simderr_handler(void);
+
+void syscall_handler(void);
+
+void default_handler(void);
+
 
 static const char *trapname(int trapno)
 {
@@ -65,8 +109,28 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-
-	// Per-CPU setup 
+	// TODO: gate descriptor的设置原理需要进一步研究, 重点就是istrap和dpl的设置
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
+	SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
+	SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
+	SETGATE(idt[T_BRKPT], 0, GD_KT, brkpt_handler, 3);
+	SETGATE(idt[T_OFLOW], 0, GD_KT, oflow_handler, 0);
+	SETGATE(idt[T_BOUND], 0, GD_KT, bound_handler, 0);
+	SETGATE(idt[T_ILLOP], 0, GD_KT, illop_handler, 0);
+	SETGATE(idt[T_DEVICE], 0, GD_KT, device_handler, 0);
+	SETGATE(idt[T_DBLFLT], 0, GD_KT, dblflt_handler, 0);
+	SETGATE(idt[T_TSS], 0, GD_KT, tss_handler, 0);
+	SETGATE(idt[T_SEGNP], 0, GD_KT, segnp_handler, 0);
+	SETGATE(idt[T_STACK], 0, GD_KT, stack_handler, 0);
+	SETGATE(idt[T_GPFLT], 0, GD_KT, gpflt_handler, 0);
+	SETGATE(idt[T_PGFLT], 0, GD_KT, pgflt_handler, 0);
+	SETGATE(idt[T_FPERR], 0, GD_KT, fperr_handler, 0);
+	SETGATE(idt[T_ALIGN], 0, GD_KT, align_handler, 0);
+	SETGATE(idt[T_MCHK], 0, GD_KT, mchk_handler, 0);
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, simderr_handler, 0);
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, syscall_handler, 3);
+	SETGATE(idt[T_DEFAULT], 0, GD_KT, default_handler, 0);
+	// Per-CPU setup
 	trap_init_percpu();
 }
 
@@ -145,6 +209,23 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
+	if (tf == NULL)
+		return;
+
+	switch (tf->tf_trapno) {
+	case T_PGFLT:
+		page_fault_handler(tf);
+		break;
+	case T_BRKPT:
+		monitor(tf);
+		break;
+	case T_SYSCALL:
+		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,
+			tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		break;
+	default:
+		break;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -215,4 +296,3 @@ page_fault_handler(struct Trapframe *tf)
 	print_trapframe(tf);
 	env_destroy(curenv);
 }
-

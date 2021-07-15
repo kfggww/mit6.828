@@ -63,7 +63,7 @@
 
 	TRAPHANDLER_NOEC(device_handler, T_DEVICE)
 
-	TRAPHANDLER(dblflt_fault_handler, T_DBLFLT)
+	TRAPHANDLER(dblflt_handler, T_DBLFLT)
 
 	TRAPHANDLER(tss_handler, T_TSS)
 
@@ -101,4 +101,5 @@ _alltraps:
 	movw $(GD_KD), %ax
 	movw %ax, %ds
 	movw %ax, %es
+	pushl %esp 		/*因为trap函数的参数是一个Trapframe的指针, 此时esp刚好指向tf*/
 	call trap
