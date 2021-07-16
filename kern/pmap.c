@@ -105,8 +105,18 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
+	// NOTE: 此时内核正在使用一个在entrypgdir.c中配置的临时页表
 
-	return NULL;
+	if(n == 0)
+		return nextfree;
+
+	n = ROUNDUP(n, PGSIZE);
+	if((uint32_t)nextfree + n > 0xffffffff)
+		panic("out of memory!\n");
+
+	result = nextfree;
+	nextfree += n;
+	return result;
 }
 
 // Set up a two-level page table:
@@ -128,7 +138,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	// panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -142,6 +152,7 @@ mem_init(void)
 	// following line.)
 
 	// Permissions: kernel R, user R
+	// NOTE: 给页目录表的一项赋值
 	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
 
 	//////////////////////////////////////////////////////////////////////
@@ -151,11 +162,16 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
+	// NOTE: 为pages分配内存
+	pages = (struct PageInfo*)boot_alloc(sizeof(struct PageInfo) * npages);
+	memset(pages, 0, ROUNDUP(sizeof(struct PageInfo) * npages, PGSIZE));
 
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	// NOTE: 分配空间给envs
+	envs = (struct Env *)boot_alloc(sizeof(struct Env) * NENV);
+	memset(envs, 0, ROUNDUP(sizeof(struct Env) * NENV, PGSIZE));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -163,6 +179,7 @@ mem_init(void)
 	// memory management will go through the page_* functions. In
 	// particular, we can now map memory using boot_map_region
 	// or page_insert
+	// NOTE: 在分配完pages和envs需要的页面之后对page_free_list进行初始化
 	page_init();
 
 	check_page_free_list(1);
@@ -179,6 +196,7 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, UPAGES, npages * sizeof(struct PageInfo), PADDR(pages), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
@@ -187,6 +205,8 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	// NOTE: 必须正确设置页表的权限, 否则用户进程在访问内存会出现page fault
+	boot_map_region(kern_pgdir, UENVS, NENV * sizeof(struct Env), PADDR(envs), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -199,6 +219,7 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -208,6 +229,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE + 1, 0, PTE_W);
 
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
@@ -299,10 +321,20 @@ page_init(void)
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
 	size_t i;
+	const size_t used_start = ((IOPHYSMEM >> 12));
+	const size_t used_end = (PADDR(boot_alloc(0) - 1) >> 12); // 通过调用boot_alloc(0)获取nextfree
 	for (i = 0; i < npages; i++) {
-		pages[i].pp_ref = 0;
-		pages[i].pp_link = page_free_list;
-		page_free_list = &pages[i];
+		// 已经使用的物理页面
+		if(i == 0 || (i >= used_start && i <= used_end)) {
+			pages[i].pp_ref = 1;
+			pages[i].pp_link = NULL;
+		}
+		// 空闲的物理页面
+		else {
+			pages[i].pp_ref = 0;
+			pages[i].pp_link = page_free_list;
+			page_free_list = &pages[i];
+		}
 	}
 }
 
@@ -322,7 +354,23 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+	// NOTE: 在page_free_list中找一个空闲的物理页面分配出去
+	// Out of memory
+	if(page_free_list == NULL)
+		return 0;
+
+	// 取出第一个空闲页面
+	struct PageInfo *next_free = page_free_list->pp_link;
+	struct PageInfo *cur_free = page_free_list;
+	cur_free->pp_link = NULL; // 页面已经被分配出去, 从空闲列表中移除
+
+	// 根据需要清空页面
+	if(alloc_flags & ALLOC_ZERO)
+		memset(page2kva(cur_free), 0, PGSIZE);
+
+	// 更新空闲页面列表
+	page_free_list = next_free;
+	return cur_free;
 }
 
 //
@@ -335,6 +383,11 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	// NOTE: 回收空闲的物理页面
+	if(pp->pp_ref != 0 || pp->pp_link != NULL)
+		panic("Failed to do a page_free!\n");
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
@@ -374,7 +427,28 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+
+	// 计算va对应的页目录表和页表索引
+	uint32_t pd_index = PDX(va);
+	uint32_t pt_index = PTX(va);
+	if(create) {
+		// 页目录表项为空
+		if((pgdir[pd_index] & PTE_P) == 0) {
+			struct PageInfo *page_table_info = page_alloc(ALLOC_ZERO);
+			if(page_table_info == NULL)
+				return NULL;
+			page_table_info->pp_ref += 1;
+			pgdir[pd_index] = ((page2pa(page_table_info) & 0xfffff000) | PTE_P | PTE_W | PTE_U);
+		}
+		pte_t *page_table = KADDR(pgdir[pd_index] & 0xfffff000);
+		return page_table + pt_index;
+	}
+	else {
+		if((pgdir[pd_index] & PTE_P) == 0)
+			return NULL;
+		pte_t *page_table = KADDR(pgdir[pd_index] & 0xfffff000);
+		return page_table+pt_index;
+	}
 }
 
 //
@@ -392,6 +466,13 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+	for(size_t i = 0; i < size; i += PGSIZE) {
+		pte_t *pte = pgdir_walk(pgdir, (void *)va, 1);
+		// pte MUST NOT be NULL
+		*pte = (pa | perm | PTE_P);
+		va += PGSIZE;
+		pa += PGSIZE;
+	}
 }
 
 //
@@ -423,6 +504,22 @@ int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
+	// 处理va当前映射到的物理页面和pp相同的情况
+	pte_t *pte = NULL;
+	if(pp == page_lookup(pgdir, va, &pte)) {
+		*pte &= (~0xfff); // 先清空属性
+		*pte |= (perm | PTE_P); // 再修改成新的属性
+		return 0;
+	}
+	page_remove(pgdir, va);
+	pte = pgdir_walk(pgdir, va, 1);
+	if(pte == NULL)
+		return -E_NO_MEM;
+	physaddr_t pa = page2pa(pp);
+	// 填充页表项, 并刷新tlb
+	*pte = ((pa & 0xfffff000) | perm | PTE_P);
+	pp->pp_ref += 1;
+	tlb_invalidate(pgdir, va);
 	return 0;
 }
 
@@ -441,7 +538,18 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+	pte_t *pte = pgdir_walk(pgdir, va, 0);
+	if(pte_store != NULL)
+		*pte_store = pte;
+
+	// 若va不存在对应的页表项, 返回NULL
+	if(pte == NULL || (*pte & PTE_P) == 0)
+		return NULL;
+
+	// 获取PageInfo
+	physaddr_t pa = PTE_ADDR(*pte);
+	struct PageInfo *page_info = pa2page(pa);
+	return page_info;
 }
 
 //
@@ -463,6 +571,22 @@ void
 page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	// NOTE: 取消va对应的映射
+	pte_t *pte = 0;
+	struct PageInfo *page_info = page_lookup(kern_pgdir, va, &pte);
+
+	// 不存在映射, 什么也不做
+	if(page_info == NULL)
+		return;
+
+	// 物理页面引用数减1
+	page_decref(page_info);
+
+	// 清空页表项, 并刷新tlb
+	if(pte != NULL) {
+		*pte = 0;
+		tlb_invalidate(pgdir, va);
+	}
 }
 
 //
@@ -536,6 +660,25 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+
+	// 试图访问内核的地址空间
+	if((uint32_t)va >= KERNBASE) {
+		user_mem_check_addr = (uint32_t)va;
+		return -E_FAULT;
+	}
+
+	uint32_t va_s = (uint32_t)ROUNDDOWN(va, PGSIZE);
+	uint32_t va_e = (uint32_t)ROUNDUP(va + len, PGSIZE);
+
+	for(; va_s < va_e; va_s += PGSIZE) {
+		pte_t *pte = pgdir_walk(env->env_pgdir, (void *)va_s, 0);
+		if(pte == NULL || (((*pte) & (perm | PTE_P)) == 0)) {
+			// NOTE: ?:表达式, :两边的表达式类型必须一致, 这样整个表达式的类型才能确定
+			// 否则编译器会不知所措:P
+			user_mem_check_addr = (va_s < (uint32_t)va ? (uint32_t)va : va_s);
+			return -E_FAULT;
+		}
+	}
 
 	return 0;
 }
