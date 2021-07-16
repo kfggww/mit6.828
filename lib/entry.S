@@ -4,6 +4,8 @@
 .data
 // Define the global symbols 'envs', 'pages', 'uvpt', and 'uvpd'
 // so that they can be used in C as if they were ordinary global arrays.
+// NOTE: 这样设置之后, 用户进程就可以通过自己虚拟内存空间映射的内存区域读取envs
+// 以及pages等区域了, 前提是在mem_init中正确设置了页表的权限和映射关系
 	.globl envs
 	.set envs, UENVS
 	.globl pages
