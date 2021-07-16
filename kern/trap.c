@@ -115,8 +115,11 @@ trap_init(void)
 {
 	extern struct Segdesc gdt[];
 
-	// LAB 3: Your code here.
-	// TODO: gate descriptor的设置原理需要进一步研究, 重点就是istrap和dpl的设置
+	// LAB 3: Your code here. NOTE: 关于interrupt和trap gate的dpl设置问题:
+	// 对于由INT指令触发的中断或者异常, 其对应的gate的dpl需要在数值上大于等
+	// 于使用INT指令的代码的CPL, 具体参考Intel Manual Vol3 Page 199, 手册中
+	// 的意思是避免软件恶意使用INT指令去访问高特权级代码, 总之, 这是硬件的执
+	// 行逻辑, 必须遵守.
 	SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
 	SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
 	SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
