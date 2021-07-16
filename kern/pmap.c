@@ -591,11 +591,24 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
-	va = ROUNDDOWN(va, PGSIZE);
-	for(; va < ROUNDUP(va + len, PGSIZE); va += PGSIZE) {
-		pte_t *pte = pgdir_walk(env->env_pgdir, va, 0);
-		if(pte == NULL || (*pte != (perm | PTE_P)))
+
+	// 试图访问内核的地址空间
+	if((uint32_t)va >= KERNBASE) {
+		user_mem_check_addr = (uint32_t)va;
+		return -E_FAULT;
+	}
+
+	uint32_t va_s = (uint32_t)ROUNDDOWN(va, PGSIZE);
+	uint32_t va_e = (uint32_t)ROUNDUP(va + len, PGSIZE);
+
+	for(; va_s < va_e; va_s += PGSIZE) {
+		pte_t *pte = pgdir_walk(env->env_pgdir, (void *)va_s, 0);
+		if(pte == NULL || (((*pte) & (perm | PTE_P)) == 0)) {
+			// NOTE: ?:表达式, :两边的表达式类型必须一致, 这样整个表达式的类型才能确定
+			// 否则编译器会不知所措:P
+			user_mem_check_addr = (va_s < (uint32_t)va ? (uint32_t)va : va_s);
 			return -E_FAULT;
+		}
 	}
 
 	return 0;
