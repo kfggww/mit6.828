@@ -282,6 +282,11 @@ mem_init_mp(void)
 	//
 	// LAB 4: Your code here:
 
+	for(int i = 0; i < NCPU; ++i) {
+		uint32_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		uint32_t pa = PADDR(percpu_kstacks[i]);
+		boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, pa, PTE_W);
+	}
 }
 
 // --------------------------------------------------------------
@@ -323,9 +328,10 @@ page_init(void)
 	size_t i;
 	const size_t used_start = ((IOPHYSMEM >> 12));
 	const size_t used_end = (PADDR(boot_alloc(0) - 1) >> 12); // 通过调用boot_alloc(0)获取nextfree
+	const size_t ap_boot_page_index = MPENTRY_PADDR >> 12; // 此物理页面用于在mp模式下启动ap
 	for (i = 0; i < npages; i++) {
 		// 已经使用的物理页面
-		if(i == 0 || (i >= used_start && i <= used_end)) {
+		if(i == 0 || i == ap_boot_page_index || (i >= used_start && i <= used_end)) {
 			pages[i].pp_ref = 1;
 			pages[i].pp_link = NULL;
 		}
@@ -633,7 +639,18 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+
+	if(base >= MMIOLIM) {
+		panic("Cannot map mmio region above MMIOLIM!\n");
+		return NULL;
+	}
+
+	size = ROUNDUP(size, PGSIZE);
+	boot_map_region(kern_pgdir, base, size, pa, PTE_PCD|PTE_PWT|PTE_W);
+	base += size;
+
+	return (void*)(base - size);
+	// panic("mmio_map_region not implemented");
 }
 
 static uintptr_t user_mem_check_addr;
