@@ -29,6 +29,19 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
+	// NOTE: 从当前CPU正在执行的env之后, 找到第一个可以调度的env
+	for(int i = 0; i < NENV; ++i) {
+		if(curenv == NULL && envs[i].env_status == ENV_RUNNABLE) {
+			curenv = &envs[i];
+			env_run(curenv);
+		}
+		else if(&envs[i] == curenv) {
+			for(int j = (i + 1) % NENV; j < NENV; ++j) {
+				if(envs[j].env_status == ENV_RUNNABLE)
+					env_run(&envs[j]);
+			}
+		}
+	}
 
 	// sched_halt never returns
 	sched_halt();

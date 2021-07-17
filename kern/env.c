@@ -552,6 +552,8 @@ env_run(struct Env *e)
 	if(curenv == NULL) {
 		curenv = e;
 		curenv->env_status = ENV_RUNNING;
+		// TODO: 在这里释放锁有问题吗???
+		unlock_kernel();
 		// env_pop_tf会从内核态进入用户态执行当前env, 所以在此之前
 		// 需要设置env的状态为ENV_RUNNING
 		env_pop_tf(&curenv->env_tf);
@@ -563,6 +565,8 @@ env_run(struct Env *e)
 	curenv->env_runs += 1; // TODO: 这里是加1处理吗???
 	lcr3(PADDR(e->env_pgdir));
 
+	// TODO: 在这里释放锁有问题吗???
+	unlock_kernel();
 	// 通过模拟iret切换到用户态执行
 	env_pop_tf(&e->env_tf);
 	// panic("env_run not yet implemented");
