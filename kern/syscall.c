@@ -89,17 +89,19 @@ sys_exofork(void)
 
 	struct Env *e = NULL;
 	envid_t pid = curenv->env_id;
-	envid_t eid = -1;
-	if((eid = env_alloc(&e, pid)) < 0) {
-		panic("Failed to alloc env in sys_exofork()!\n");
-		return eid;
-	}
+	int res = 0;
+	if((res = env_alloc(&e, pid)) < 0)
+		return res;
+
+	assert(e != NULL);
 
 	e->env_status = ENV_NOT_RUNNABLE;
 	e->env_tf = curenv->env_tf;
-	// TODO: 修改寄存器的值
+	// 修改寄存器的值, 使得子进程得到的进程号是0
+	// e->env_tf.tf_regs.reg_eax = 0;
 
-	return eid;
+	cprintf("sys_exofork, eid: %d\n", e->env_id);
+	return e->env_id;
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -230,7 +232,37 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	//   check the current permissions on the page.
 
 	// LAB 4: Your code here.
-	panic("sys_page_map not implemented");
+	// panic("sys_page_map not implemented");
+	struct PageInfo *pp = NULL;
+	pte_t *pte;
+
+	// 检查srcva和dstva
+	if((uint32_t)srcva >= UTOP || ((uint32_t)srcva & 0x3ff) != 0
+	   || (uint32_t)dstva >= UTOP || ((uint32_t)dstva & 0x3ff) != 0)
+		return -E_INVAL;
+
+	// 获取srcenv和dstenv
+	struct Env *srcenv = NULL, *dstenv = NULL;
+	if(envid2env(srcenvid, &srcenv, 1) < 0 || envid2env(dstenvid, &dstenv, 1) < 0)
+		return -E_BAD_ENV;
+
+	assert(srcenv != NULL && dstenv != NULL);
+
+	// 检查perm
+	pp = page_lookup(srcenv->env_pgdir, srcva, &pte);
+	if(pp == NULL || pte == NULL || (*pte & PTE_P) == 0)
+		return -E_INVAL;
+	if((perm & PTE_W) == PTE_W && (*pte & PTE_W) != PTE_W)
+		return -E_INVAL;
+	if((perm & (PTE_U | PTE_P))!= (PTE_U | PTE_P) ||
+	   ((perm & ~(PTE_U | PTE_P | PTE_AVAIL | PTE_W)) != 0))
+		return -E_INVAL;
+
+	// 复制映射
+	if(page_insert(dstenv->env_pgdir, pp, dstva, perm) < 0)
+		return -E_NO_MEM;
+
+	return 0;
 }
 
 // Unmap the page of memory at 'va' in the address space of 'envid'.
@@ -246,7 +278,18 @@ sys_page_unmap(envid_t envid, void *va)
 	// Hint: This function is a wrapper around page_remove().
 
 	// LAB 4: Your code here.
-	panic("sys_page_unmap not implemented");
+	// panic("sys_page_unmap not implemented");
+	if((uint32_t)va >= UTOP || ((uint32_t)va & 0x3ff) != 0)
+		return -E_INVAL;
+
+	struct Env *env = NULL;
+	if(envid2env(envid, &env, 1) < 0)
+		return -E_BAD_ENV;
+
+	assert(env != NULL);
+
+	page_remove(env->env_pgdir, va);
+	return 0;
 }
 
 // Try to send 'value' to the target env 'envid'.
@@ -323,7 +366,6 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 
 	if(syscallno > 255 || syscallno < 0)
 		return -E_INVAL;
-	// panic("syscall not implemented");
 
 	switch (syscallno) {
 	case SYS_cputs:
@@ -334,8 +376,17 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_getenvid:
 		return sys_getenvid();
 	case SYS_env_destroy:
-		sys_env_destroy(a1);
-		return 0;
+		return sys_env_destroy(a1);
+	case SYS_exofork:
+		return sys_exofork();
+	case SYS_env_set_status:
+		return sys_env_set_status(a1, a2);
+	case SYS_page_alloc:
+		return sys_page_alloc(a1, (void *)a2, a3);
+	case SYS_page_map:
+		return sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
+	case SYS_page_unmap:
+		return sys_page_unmap(a1, (void *)a2);
 	case SYS_yield:
 		sys_yield();
 		return 0;
