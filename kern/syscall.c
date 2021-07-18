@@ -98,7 +98,7 @@ sys_exofork(void)
 	e->env_status = ENV_NOT_RUNNABLE;
 	e->env_tf = curenv->env_tf;
 	// 修改寄存器的值, 使得子进程得到的进程号是0
-	// e->env_tf.tf_regs.reg_eax = 0;
+	e->env_tf.tf_regs.reg_eax = 0;
 
 	cprintf("sys_exofork, eid: %d\n", e->env_id);
 	return e->env_id;
@@ -122,8 +122,7 @@ sys_env_set_status(envid_t envid, int status)
 
 	// LAB 4: Your code here.
 	// panic("sys_env_set_status not implemented");
-
-	if(status != ENV_RUNNABLE || status != ENV_NOT_RUNNABLE)
+	if(status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE)
 		return -E_INVAL;
 
 	struct Env *e;
@@ -367,30 +366,43 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	if(syscallno > 255 || syscallno < 0)
 		return -E_INVAL;
 
+	int res = -E_INVAL;
+
 	switch (syscallno) {
 	case SYS_cputs:
 		sys_cputs((char *)a1, a2);
-		return 0;
+		res = 0;
+		break;
 	case SYS_cgetc:
-		return sys_cgetc();
+		res = sys_cgetc();
+		break;
 	case SYS_getenvid:
-		return sys_getenvid();
+		res = sys_getenvid();
+		break;
 	case SYS_env_destroy:
-		return sys_env_destroy(a1);
+		res = sys_env_destroy(a1);
+		break;
 	case SYS_exofork:
-		return sys_exofork();
+		res = sys_exofork();
+		break;
 	case SYS_env_set_status:
-		return sys_env_set_status(a1, a2);
+		res = sys_env_set_status(a1, a2);
+		break;
 	case SYS_page_alloc:
-		return sys_page_alloc(a1, (void *)a2, a3);
+		res = sys_page_alloc(a1, (void *)a2, a3);
+		break;
 	case SYS_page_map:
-		return sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
+		res = sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
+		break;
 	case SYS_page_unmap:
-		return sys_page_unmap(a1, (void *)a2);
+		res = sys_page_unmap(a1, (void *)a2);
+		break;
 	case SYS_yield:
 		sys_yield();
-		return 0;
+		res = 0;
 	default:
-		return -E_INVAL;
+		break;
 	}
+
+	return res;
 }
