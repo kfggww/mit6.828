@@ -85,7 +85,21 @@ sys_exofork(void)
 	// will appear to return 0.
 
 	// LAB 4: Your code here.
-	panic("sys_exofork not implemented");
+	// panic("sys_exofork not implemented");
+
+	struct Env *e = NULL;
+	envid_t pid = curenv->env_id;
+	envid_t eid = -1;
+	if((eid = env_alloc(&e, pid)) < 0) {
+		panic("Failed to alloc env in sys_exofork()!\n");
+		return eid;
+	}
+
+	e->env_status = ENV_NOT_RUNNABLE;
+	e->env_tf = curenv->env_tf;
+	// TODO: 修改寄存器的值
+
+	return eid;
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -105,7 +119,17 @@ sys_env_set_status(envid_t envid, int status)
 	// envid's status.
 
 	// LAB 4: Your code here.
-	panic("sys_env_set_status not implemented");
+	// panic("sys_env_set_status not implemented");
+
+	if(status != ENV_RUNNABLE || status != ENV_NOT_RUNNABLE)
+		return -E_INVAL;
+
+	struct Env *e;
+	if(envid2env(envid, &e, 1) < 0)
+		return -E_BAD_ENV;
+
+	e->env_status = status;
+	return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -150,7 +174,32 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
-	panic("sys_page_alloc not implemented");
+	// panic("sys_page_alloc not implemented");
+
+	// 检查权限
+	if((perm & (PTE_U | PTE_P))!= (PTE_U | PTE_P) ||
+	   ((perm & ~(PTE_U | PTE_P | PTE_AVAIL | PTE_W)) != 0))
+		return -E_INVAL;
+
+	// 检查va
+	if((uint32_t)va >= UTOP || ((uint32_t)va & 0x3ff) != 0)
+		return -E_INVAL;
+
+	// 获取env
+	struct Env *env = NULL;
+	if(envid2env(envid, &env, 1) < 0)
+		return -E_BAD_ENV;
+
+	// 分配页面并映射
+	struct PageInfo *pp = NULL;
+	if((pp = page_alloc(ALLOC_ZERO)) == NULL)
+		return -E_NO_MEM;
+
+	page_remove(env->env_pgdir, va);
+	if(page_insert(env->env_pgdir, pp, va, perm) < 0)
+		return -E_NO_MEM;
+
+	return 0;
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
@@ -286,6 +335,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_getenvid();
 	case SYS_env_destroy:
 		sys_env_destroy(a1);
+		return 0;
+	case SYS_yield:
+		sys_yield();
 		return 0;
 	default:
 		return -E_INVAL;

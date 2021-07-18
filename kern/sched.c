@@ -32,8 +32,7 @@ sched_yield(void)
 	// NOTE: 从当前CPU正在执行的env之后, 找到第一个可以调度的env
 	for(int i = 0; i < NENV; ++i) {
 		if(curenv == NULL && envs[i].env_status == ENV_RUNNABLE) {
-			curenv = &envs[i];
-			env_run(curenv);
+			env_run(&envs[i]);
 		}
 		else if(&envs[i] == curenv) {
 			for(int j = (i + 1) % NENV; j < NENV; ++j) {
@@ -43,6 +42,11 @@ sched_yield(void)
 		}
 	}
 
+	// 没有找到可以调度的进程, 则恢复当前进程的运行
+	if(curenv != NULL && curenv->env_status == ENV_RUNNING)
+		env_run(curenv);
+
+	// NOTE: 是不是应该有一个空闲进程???
 	// sched_halt never returns
 	sched_halt();
 }
