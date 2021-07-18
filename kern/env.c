@@ -546,12 +546,10 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 
-	/* if(e == curenv || e == NULL) */
-	/* 	goto over; */
-
 	if(curenv == NULL) {
 		curenv = e;
 		curenv->env_status = ENV_RUNNING;
+		lcr3(PADDR(e->env_pgdir));
 		// TODO: 在这里释放锁有问题吗???
 		unlock_kernel();
 		// env_pop_tf会从内核态进入用户态执行当前env, 所以在此之前
