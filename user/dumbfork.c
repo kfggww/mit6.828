@@ -26,7 +26,12 @@ void
 duppage(envid_t dstenv, void *addr)
 {
 	int r;
-
+	// TODO: 这个地方到底在做啥???
+	// 首先给子进程分配了在addr这个地址分配了一个物理页面, 并填充好子进程的页表
+	// 然后把父进程UTEMP出的虚拟内存, 映射到和子进程的addr地址一样的物理地址处
+	// 然后把父进程addr处的物理页面拷贝到TEMP处, 此时子进程的addr处就有了一样的内容
+	// 最后解除父进程在UTEMP处的映射, 用于下次拷贝数据
+	// NOTE: 经过以上的一波操作, 子进程就有了父进程的代码和数据:-P
 	// This is NOT what you should do in your fork.
 	if ((r = sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
