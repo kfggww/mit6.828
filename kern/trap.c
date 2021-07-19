@@ -399,50 +399,35 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 
+	// 不是用内联汇编操作user exception stack, 好好理解一下指针是什么:-)
 	if(curenv->env_pgfault_upcall != NULL) {
-		// 在Exception stack上构造一个UTrapframe
-		struct UTrapframe utf;
-		utf.utf_fault_va = fault_va;
-		utf.utf_err = tf->tf_err;
-		utf.utf_regs = tf->tf_regs;
-		utf.utf_eip = tf->tf_eip;
-		utf.utf_eflags = tf->tf_eflags;
-		utf.utf_esp = tf->tf_esp;
+		// 检查env_pgfault_upcall
+		user_mem_assert(curenv, curenv->env_pgfault_upcall, 1, PTE_P|PTE_U);
 
-		uintptr_t xesp = 0;
-		asm volatile ("movl %%esp, %%eax\n\t"
-			      "movl %1, %%esp\n\t"
-			      "pushl %2 \n\t"
-			      "pushl %3 \n\t"
-			      "pushl %4 \n\t"
-			      "pushl %5 \n\t"
-			      "pushl %6 \n\t"
-			      "pushl %7 \n\t"
-			      "pushl %8 \n\t"
-			      "pushl %9 \n\t"
-			      "pushl %10 \n\t"
-			      "pushl %11 \n\t"
-			      "pushl %12 \n\t"
-			      "pushl %13 \n\t"
-			      "pushl %14 \n\t"
-			      "movl %%esp, %0\n\t"
-			      "movl %%eax, %%esp\n\t"
-			      :"=m"(xesp)
-			      :"i"(UXSTACKTOP), "m"(utf.utf_esp), "m"(utf.utf_eflags), \
-			       "m"(utf.utf_eip), "m"(utf.utf_regs.reg_eax), \
-			       "m"(utf.utf_regs.reg_ecx), "m"(utf.utf_regs.reg_edx), \
-			       "m"(utf.utf_regs.reg_ebx), "m"(utf.utf_regs.reg_oesp), \
-			       "m"(utf.utf_regs.reg_ebp), "m"(utf.utf_regs.reg_esi), \
-			       "m"(utf.utf_regs.reg_edi), "m"(utf.utf_err), \
-			       "m"(utf.utf_fault_va)
-			      :"eax"
-			);
+		// 计算user exception stack, 即指针utf
+		struct UTrapframe *utf;
 
-		// 修改tf, 把控制权交给pgfault_upcall
+		if(tf->tf_esp <= UXSTACKTOP && tf->tf_esp >= UXSTACKTOP - PGSIZE)
+			utf = (struct UTrapframe *)(tf->tf_esp - 4 - sizeof(struct UTrapframe));
+		else
+			utf = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
+
+		// 检查utf指针
+		user_mem_assert(curenv, utf, sizeof(struct UTrapframe), PTE_P|PTE_U|PTE_W);
+
+		// 在user exception stack上填充UTrapframe
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_esp = tf->tf_esp;
+
+		// 调整tf, 使得控制能够转移到env_pgfault_upcall
 		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
-		tf->tf_esp = xesp;
+		tf->tf_esp = (uintptr_t)(utf);
 
-		// 转到user mode执行
+		// 转到pgfault_upcall执行
 		env_run(curenv);
 	}
 
