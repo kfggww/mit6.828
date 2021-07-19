@@ -145,7 +145,17 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	// panic("sys_env_set_pgfault_upcall not implemented");
+
+	struct Env *env = NULL;
+	if(envid2env(envid, &env, 1) < 0)
+		return -E_BAD_ENV;
+
+	assert(env != NULL);
+	// TODO: 检查func指针是否合法
+
+	env->env_pgfault_upcall = func;
+	return 0;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -183,7 +193,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 		return -E_INVAL;
 
 	// 检查va
-	if((uint32_t)va >= UTOP || ((uint32_t)va & 0x3ff) != 0)
+	if((uint32_t)va >= UTOP || ((uint32_t)va & 0xfff) != 0)
 		return -E_INVAL;
 
 	// 获取env
@@ -236,8 +246,8 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	pte_t *pte;
 
 	// 检查srcva和dstva
-	if((uint32_t)srcva >= UTOP || ((uint32_t)srcva & 0x3ff) != 0
-	   || (uint32_t)dstva >= UTOP || ((uint32_t)dstva & 0x3ff) != 0)
+	if((uint32_t)srcva >= UTOP || ((uint32_t)srcva & 0xfff) != 0
+	   || (uint32_t)dstva >= UTOP || ((uint32_t)dstva & 0xfff) != 0)
 		return -E_INVAL;
 
 	// 获取srcenv和dstenv
@@ -278,7 +288,7 @@ sys_page_unmap(envid_t envid, void *va)
 
 	// LAB 4: Your code here.
 	// panic("sys_page_unmap not implemented");
-	if((uint32_t)va >= UTOP || ((uint32_t)va & 0x3ff) != 0)
+	if((uint32_t)va >= UTOP || ((uint32_t)va & 0xfff) != 0)
 		return -E_INVAL;
 
 	struct Env *env = NULL;
@@ -387,6 +397,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		break;
 	case SYS_env_set_status:
 		res = sys_env_set_status(a1, a2);
+		break;
+	case SYS_env_set_pgfault_upcall:
+		res = sys_env_set_pgfault_upcall(a1, (void *)a2);
 		break;
 	case SYS_page_alloc:
 		res = sys_page_alloc(a1, (void *)a2, a3);
