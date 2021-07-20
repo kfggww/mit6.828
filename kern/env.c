@@ -558,7 +558,9 @@ env_run(struct Env *e)
 		env_pop_tf(&curenv->env_tf);
 	}
 
-	curenv->env_status = ENV_RUNNABLE;
+	// 只有在当前env是运行状态时才修改其状态为可运行
+	if(curenv->env_status == ENV_RUNNING)
+		curenv->env_status = ENV_RUNNABLE;
 	curenv = e;
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs += 1; // TODO: 这里是加1处理吗???

@@ -362,13 +362,11 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	// 检查target_env是否存在
 	struct Env *target_env = NULL;
 	if(envid2env(envid, &target_env, 0) < 0 || target_env == NULL) {
-		cprintf("BAD_ENV in kern/send, [%08x] -> [%08x]\n", curenv->env_id, envid);
 		return -E_BAD_ENV;
 	}
 
 	// 检查target_env是否正在等待接受消息
 	if(!target_env->env_ipc_recving || target_env->env_status != ENV_NOT_RUNNABLE) {
-		cprintf("NOT_RECV in kern/send, [%08x] -> [%08x], target_status: %d, target_recving: %d\n", curenv->env_id, target_env->env_id, target_env->env_status, target_env->env_ipc_recving);
 		return -E_IPC_NOT_RECV;
 	}
 
@@ -376,7 +374,6 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	target_env->env_ipc_from = curenv->env_id;
 	target_env->env_ipc_value = value;
 	target_env->env_ipc_perm = 0;
-	cprintf("VALUE in kern/send: %d\n", target_env->env_ipc_value);
 
 	if((uint32_t)(target_env->env_ipc_dstva) != UTOP && (uint32_t)(srcva) != UTOP) {
 		if(sys_page_map(curenv->env_id, srcva, envid, target_env->env_ipc_dstva, perm) < 0)
@@ -414,7 +411,6 @@ sys_ipc_recv(void *dstva)
 
 	// 这里应该设置cuenv的eax, 使得用户进程接受到的系统调用返回值为0
 	curenv->env_tf.tf_regs.reg_eax = 0;
-	cprintf("Call ipc recv in kern, [%08x], status: %d, is_recving: %d\n", curenv->env_id, curenv->env_status, curenv->env_ipc_recving);
 	sched_yield();
 
 	return 0;
