@@ -407,6 +407,7 @@ page_fault_handler(struct Trapframe *tf)
 		// 计算user exception stack, 即指针utf
 		struct UTrapframe *utf;
 
+		// TODO: 为什么在嵌套的情况下需要留一个大于4字节的间隙???
 		if(tf->tf_esp <= UXSTACKTOP && tf->tf_esp >= UXSTACKTOP - PGSIZE)
 			utf = (struct UTrapframe *)(tf->tf_esp - 4 - sizeof(struct UTrapframe));
 		else

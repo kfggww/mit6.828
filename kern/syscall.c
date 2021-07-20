@@ -100,7 +100,6 @@ sys_exofork(void)
 	// 修改寄存器的值, 使得子进程得到的进程号是0
 	e->env_tf.tf_regs.reg_eax = 0;
 
-	cprintf("sys_exofork, eid: %d\n", e->env_id);
 	return e->env_id;
 }
 
