@@ -88,6 +88,7 @@
 
 	TRAPHANDLER_NOEC(default_handler, T_DEFAULT)
 
+	TRAPHANDLER_NOEC(irq_timer_handler, IRQ_TIMER + IRQ_OFFSET)
 /*
  * Lab 3: Your code here for _alltraps
  */
