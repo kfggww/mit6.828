@@ -40,7 +40,7 @@ sched_yield(void)
 	// 没有找到可以调度的进程, 则恢复当前进程的运行
 	// TODO: 按道理halt中已经开启了时钟中断, 这里应该可以不用了啊
 	if(curenv != NULL && curenv->env_status == ENV_RUNNING)
-	 	env_run(curenv);
+		env_run(curenv);
 
 	// NOTE: 是不是应该有一个空闲进程???
 	// sched_halt never returns

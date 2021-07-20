@@ -342,7 +342,51 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	// panic("sys_ipc_try_send not implemented");
+	// 检查srcva和perm是否合法
+	if((uintptr_t)srcva > UTOP)
+		return -E_INVAL;
+	else if((uintptr_t)srcva % PGSIZE != 0)
+		return -E_INVAL;
+	else if(perm & (~PTE_SYSCALL))
+		return -E_INVAL;
+
+	pte_t *pte = NULL;
+	pte = pgdir_walk(curenv->env_pgdir, srcva, 0);
+	if(((uint32_t)srcva != UTOP) && (pte == NULL || !((*pte) & PTE_P)))
+		return -E_INVAL;
+
+	else if((perm & PTE_W) && !((*pte) & PTE_W))
+		return -E_INVAL;
+
+	// 检查target_env是否存在
+	struct Env *target_env = NULL;
+	if(envid2env(envid, &target_env, 0) < 0 || target_env == NULL) {
+		cprintf("BAD_ENV in kern/send, [%08x] -> [%08x]\n", curenv->env_id, envid);
+		return -E_BAD_ENV;
+	}
+
+	// 检查target_env是否正在等待接受消息
+	if(!target_env->env_ipc_recving || target_env->env_status != ENV_NOT_RUNNABLE) {
+		cprintf("NOT_RECV in kern/send, [%08x] -> [%08x], target_status: %d, target_recving: %d\n", curenv->env_id, target_env->env_id, target_env->env_status, target_env->env_ipc_recving);
+		return -E_IPC_NOT_RECV;
+	}
+
+	target_env->env_ipc_recving = false;
+	target_env->env_ipc_from = curenv->env_id;
+	target_env->env_ipc_value = value;
+	target_env->env_ipc_perm = 0;
+	cprintf("VALUE in kern/send: %d\n", target_env->env_ipc_value);
+
+	if((uint32_t)(target_env->env_ipc_dstva) != UTOP && (uint32_t)(srcva) != UTOP) {
+		if(sys_page_map(curenv->env_id, srcva, envid, target_env->env_ipc_dstva, perm) < 0)
+			return -E_NO_MEM;
+		target_env->env_ipc_perm = perm;
+	}
+
+	target_env->env_status = ENV_RUNNABLE;
+	return 0;
+
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -360,7 +404,19 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	// panic("sys_ipc_recv not implemented");
+	if((uintptr_t)dstva > UTOP || (uintptr_t)dstva  % PGSIZE != 0)
+		return -E_INVAL;
+
+	curenv->env_ipc_recving = true;
+	curenv->env_ipc_dstva = dstva;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+
+	// 这里应该设置cuenv的eax, 使得用户进程接受到的系统调用返回值为0
+	curenv->env_tf.tf_regs.reg_eax = 0;
+	cprintf("Call ipc recv in kern, [%08x], status: %d, is_recving: %d\n", curenv->env_id, curenv->env_status, curenv->env_ipc_recving);
+	sched_yield();
+
 	return 0;
 }
 
@@ -412,6 +468,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_yield:
 		sys_yield();
 		res = 0;
+	case SYS_ipc_try_send:
+		res = sys_ipc_try_send(a1, a2, (void *)a3, a4);
+		break;
+	case SYS_ipc_recv:
+		res = sys_ipc_recv((void *)a1);
+		break;
 	default:
 		break;
 	}

@@ -2,6 +2,40 @@
 
 #include <inc/lib.h>
 
+static inline int32_t
+syscall(int num, int check, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+{
+	int32_t ret;
+
+	// Generic system call: pass system call number in AX,
+	// up to five parameters in DX, CX, BX, DI, SI.
+	// Interrupt kernel with T_SYSCALL.
+	//
+	// The "volatile" tells the assembler not to optimize
+	// this instruction away just because we don't use the
+	// return value.
+	//
+	// The last clause tells the assembler that this can
+	// potentially change the condition codes and arbitrary
+	// memory locations.
+
+	asm volatile("int %1\n"
+		     : "=a" (ret)
+		     : "i" (T_SYSCALL),
+		       "a" (num),
+		       "d" (a1),
+		       "c" (a2),
+		       "b" (a3),
+		       "D" (a4),
+		       "S" (a5)
+		     : "cc", "memory");
+
+	if(check && ret > 0)
+		panic("syscall %d returned %d (> 0)", num, ret);
+
+	return ret;
+}
+
 // Receive a value via IPC and return it.
 // If 'pg' is nonnull, then any page sent by the sender will be mapped at
 //	that address.
@@ -23,8 +57,28 @@ int32_t
 ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 {
 	// LAB 4: Your code here.
-	panic("ipc_recv not implemented");
-	return 0;
+	// panic("ipc_recv not implemented");
+	if(pg == NULL)
+		pg = (void *)UTOP;
+
+	int32_t ret = syscall(SYS_ipc_recv, 0, (uint32_t)pg, 0, 0, 0, 0);
+
+	// 系统调用失败
+	if(ret < 0) {
+		if(from_env_store != NULL)
+			*from_env_store = 0;
+		if(perm_store != NULL)
+			*perm_store = 0;
+		return ret;
+	}
+
+	// 系统调用成功
+	if(from_env_store != NULL)
+		*from_env_store = thisenv->env_ipc_from;
+	if(perm_store != NULL)
+		*perm_store = thisenv->env_ipc_perm;
+	// 返回接收到的数据
+	return thisenv->env_ipc_value;
 }
 
 // Send 'val' (and 'pg' with 'perm', if 'pg' is nonnull) to 'toenv'.
@@ -39,7 +93,20 @@ void
 ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 {
 	// LAB 4: Your code here.
-	panic("ipc_send not implemented");
+	// panic("ipc_send not implemented");
+	if(pg == NULL)
+		pg = (void *)UTOP;
+
+	// 不断尝试直到发送成功
+	int max = 10;
+	while (max--) {
+		int32_t ret = syscall(SYS_ipc_try_send, 0, to_env, val, (uint32_t)pg, perm, 0);
+		if(ret == 0)
+			return;
+		if(ret < 0 && ret != -E_IPC_NOT_RECV)
+			panic("Failed to call ipc_send!\n");
+		sys_yield();
+	}
 }
 
 // Find the first environment of the given type.  We'll use this to
