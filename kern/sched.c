@@ -29,22 +29,18 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	// NOTE: 从当前CPU正在执行的env之后, 找到第一个可以调度的env
+	// NOTE: 遍历envs, 找到第一个不是curenv的可运行env
 	for(int i = 0; i < NENV; ++i) {
-		if(curenv == NULL && envs[i].env_status == ENV_RUNNABLE) {
+		if(curenv == NULL && envs[i].env_status == ENV_RUNNABLE)
 			env_run(&envs[i]);
-		}
-		else if(&envs[i] == curenv) {
-			for(int j = (i + 1) % NENV; j < NENV; ++j) {
-				if(envs[j].env_status == ENV_RUNNABLE)
-					env_run(&envs[j]);
-			}
-		}
+		if(&envs[i] != curenv && envs[i].env_status == ENV_RUNNABLE)
+			env_run(&envs[i]);
 	}
 
 	// 没有找到可以调度的进程, 则恢复当前进程的运行
+	// TODO: 按道理halt中已经开启了时钟中断, 这里应该可以不用了啊
 	if(curenv != NULL && curenv->env_status == ENV_RUNNING)
-		env_run(curenv);
+	 	env_run(curenv);
 
 	// NOTE: 是不是应该有一个空闲进程???
 	// sched_halt never returns
