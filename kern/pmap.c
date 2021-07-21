@@ -581,7 +581,7 @@ page_remove(pde_t *pgdir, void *va)
 	// Fill this function in
 	// NOTE: 取消va对应的映射
 	pte_t *pte = 0;
-	struct PageInfo *page_info = page_lookup(kern_pgdir, va, &pte);
+	struct PageInfo *page_info = page_lookup(pgdir, va, &pte);
 
 	// 不存在映射, 什么也不做
 	if(page_info == NULL)

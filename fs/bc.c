@@ -51,6 +51,14 @@ bc_pgfault(struct UTrapframe *utf)
 	// the disk.
 	//
 	// LAB 5: you code here:
+	// NOTE: 此函数在fs env发生缺页中断时执行, 需要根据缺页产生的地址, 读取硬盘上的数据
+
+	addr = ROUNDDOWN(addr, PGSIZE);
+	if((r = sys_page_alloc(thisenv->env_id, addr, PTE_P|PTE_U|PTE_W)) < 0)
+		panic("Failed to call sys_page_alloc at address [%08x] with error %e", addr, r);
+
+	// 读取的单位是扇区, 扇区编号从0开始, 采用的是LSB的方式
+	ide_read(blockno * 8, addr, 8);
 
 	// Clear the dirty bit for the disk block page since we just read the
 	// block from disk
@@ -80,7 +88,21 @@ flush_block(void *addr)
 		panic("flush_block of bad va %08x", addr);
 
 	// LAB 5: Your code here.
-	panic("flush_block not implemented");
+	// panic("flush_block not implemented");
+	// NOTE: 刷新内存页面缓存到硬盘, 页面必须满足1): 已经映射到虚拟地址空间, 2): 是脏页面
+
+	if(!va_is_mapped(addr) || !va_is_dirty(addr))
+		return;
+
+	// 开始写入脏页面到硬盘
+	addr = ROUNDDOWN(addr, PGSIZE);
+	ide_write(blockno * 8, addr, 8);
+
+	// 重新映射addr
+	int r = 0;
+	if((r = sys_page_map(0, addr, 0, addr, PTE_SYSCALL)) < 0)
+		panic("Failed to call sys_page_map in flush block at address [%08x] with error %e\n", addr, r);
+
 }
 
 // Test that the block cache works, by smashing the superblock and

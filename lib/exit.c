@@ -4,7 +4,8 @@
 void
 exit(void)
 {
-	close_all();
+	// NOTE: 临时注释掉下面这行
+	// close_all();
 	sys_env_destroy(0);
 }
 
