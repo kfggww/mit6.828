@@ -251,7 +251,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 
 	// 获取srcenv和dstenv
 	struct Env *srcenv = NULL, *dstenv = NULL;
-	if(envid2env(srcenvid, &srcenv, 1) < 0 || envid2env(dstenvid, &dstenv, 1) < 0)
+	if(envid2env(srcenvid, &srcenv, 0) < 0 || envid2env(dstenvid, &dstenv, 0) < 0)
 		return -E_BAD_ENV;
 
 	assert(srcenv != NULL && dstenv != NULL);
@@ -361,14 +361,13 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 
 	// 检查target_env是否存在
 	struct Env *target_env = NULL;
-	if(envid2env(envid, &target_env, 0) < 0 || target_env == NULL) {
+	if(envid2env(envid, &target_env, 0) < 0 || target_env == NULL)
 		return -E_BAD_ENV;
-	}
 
 	// 检查target_env是否正在等待接受消息
-	if(!target_env->env_ipc_recving || target_env->env_status != ENV_NOT_RUNNABLE) {
+	if(!target_env->env_ipc_recving || target_env->env_status != ENV_NOT_RUNNABLE)
 		return -E_IPC_NOT_RECV;
-	}
+
 
 	target_env->env_ipc_recving = false;
 	target_env->env_ipc_from = curenv->env_id;

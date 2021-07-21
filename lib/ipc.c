@@ -98,13 +98,12 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 		pg = (void *)UTOP;
 
 	// 不断尝试直到发送成功
-	int max = 10;
-	while (max--) {
+	while (1) {
 		int32_t ret = syscall(SYS_ipc_try_send, 0, to_env, val, (uint32_t)pg, perm, 0);
 		if(ret == 0)
 			return;
 		if(ret < 0 && ret != -E_IPC_NOT_RECV)
-			panic("Failed to call ipc_send!\n");
+			panic("Failed to call lib/ipc.c:ipc_send!\n");
 		sys_yield();
 	}
 }
