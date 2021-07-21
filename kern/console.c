@@ -197,12 +197,13 @@ cga_putc(int c)
 	}
 
 	// What is the purpose of this?
+	// 输出到屏幕的字符已经占满一页, 把屏幕的内容滚动一行
 	if (crt_pos >= CRT_SIZE) {
 		int i;
 
 		memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));
 		for (i = CRT_SIZE - CRT_COLS; i < CRT_SIZE; i++)
-			crt_buf[i] = 0x0700 | ' ';
+			crt_buf[i] = 0x0700 | ' '; // 最后一行用一行空格填充, 并且设置显示属性
 		crt_pos -= CRT_COLS;
 	}
 

@@ -31,6 +31,24 @@ sched_yield(void)
 
 	// LAB 4: Your code here.
 
+	// NOTE: 轮询调度, 不是每次都从第一个开始查找的, 这样会使得后面的进程饿死
+	int start = 0;
+	if(curenv != NULL)
+		start = ENVX(curenv->env_id) + 1;
+
+	for(int i = 0; i < NENV; ++i) {
+		start %= NENV;
+		if(envs[start].env_status == ENV_RUNNABLE)
+			env_run(&envs[start]);
+		start += 1;
+	}
+
+	// 没有找到可以调度的进程, 则恢复当前进程的运行
+	// TODO: 按道理halt中已经开启了时钟中断, 这里应该可以不用了啊
+	if(curenv != NULL && curenv->env_status == ENV_RUNNING)
+		env_run(curenv);
+
+	// NOTE: 是不是应该有一个空闲进程???
 	// sched_halt never returns
 	sched_halt();
 }
@@ -76,7 +94,7 @@ sched_halt(void)
 		"pushl $0\n"
 		"pushl $0\n"
 		// Uncomment the following line after completing exercise 13
-		//"sti\n"
+		"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"

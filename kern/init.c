@@ -17,6 +17,40 @@
 
 static void boot_aps(void);
 
+#define GET_TF(tf)				  \
+	asm volatile ("movl %%ebp, %0\n\t"        \
+		      "movl 4(%%ebp), %%eax\n\t"  \
+		      "movl %%eax, %1\n\t"        \
+		      "movl 8(%%ebp), %%eax\n\t"  \
+		      "movl %%eax, %2\n\t"        \
+		      "movl 12(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %3\n\t"        \
+		      "movl 16(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %4\n\t"        \
+		      "movl 20(%%ebp), %%eax\n\t" \
+		      "movl %%eax, %5"            \
+		      :"=m"((tf).tf_regs.reg_ebp), "=m"((tf).tf_eip),	\
+		       "=m"((tf).tf_regs.reg_eax), "=m"((tf).tf_regs.reg_ebx), \
+		       "=m"((tf).tf_regs.reg_ecx), "=m"((tf).tf_regs.reg_edx)	\
+		      : \
+		      :"%eax" \
+		);
+
+
+
+// Test the stack backtrace function (lab 1 only)
+void
+test_backtrace(int x)
+{
+	// 获取栈桢
+	struct Trapframe tf;
+	GET_TF(tf);
+	if (x > 0)
+		test_backtrace(x-1);
+	else
+		mon_backtrace(0, 0, &tf);
+	mon_backtrace(0, 0, &tf);
+}
 
 void
 i386_init(void)
@@ -29,6 +63,12 @@ i386_init(void)
 
 	// Lab 2 memory management initialization functions
 	mem_init();
+	// Test the stack backtrace function (lab 1 only)
+	test_backtrace(5);
+	// 记录i386_init栈桢结构
+	struct Trapframe tf;
+	GET_TF(tf);
+	mon_backtrace(0, 0, &tf);
 
 	// Lab 3 user environment initialization functions
 	env_init();
@@ -43,6 +83,7 @@ i386_init(void)
 
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:
+	lock_kernel();
 
 	// Starting non-boot CPUs
 	boot_aps();
@@ -115,9 +156,11 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
+	lock_kernel();
+	sched_yield();
 
 	// Remove this after you finish Exercise 6
-	for (;;);
+	// for (;;);
 }
 
 /*

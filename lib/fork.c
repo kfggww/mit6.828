@@ -7,6 +7,12 @@
 // It is one of the bits explicitly allocated to user processes (PTE_AVAIL).
 #define PTE_COW		0x800
 
+#define PTE_READABLE(pte) (((pte)!=NULL) && ((*pte) & (PTE_P|PTE_U)) == (PTE_P|PTE_U))
+#define PTE_WRITEABLE(pte) (((pte)!=NULL) && ((*pte) & (PTE_P|PTE_U|PTE_W)) == (PTE_P|PTE_U|PTE_W))
+#define PTE_COWABLE(pte) (((pte)!=NULL) && ((*pte) & (PTE_P|PTE_U|PTE_COW)) == (PTE_P|PTE_U|PTE_COW))
+
+void _pgfault_upcall(void);
+
 //
 // Custom page fault handler - if faulting page is copy-on-write,
 // map in our own private writable copy.
@@ -16,7 +22,7 @@ pgfault(struct UTrapframe *utf)
 {
 	void *addr = (void *) utf->utf_fault_va;
 	uint32_t err = utf->utf_err;
-	int r;
+	// int r;
 
 	// Check that the faulting access was (1) a write, and (2) to a
 	// copy-on-write page.  If not, panic.
@@ -26,6 +32,18 @@ pgfault(struct UTrapframe *utf)
 
 	// LAB 4: Your code here.
 
+	unsigned pn = (unsigned)addr / PGSIZE;
+	unsigned index_of_uvpd = pn / 1024;
+	unsigned index_of_uvpt = pn % 1024;
+
+	pde_t *pde = (pde_t *)((unsigned)uvpd + index_of_uvpd * 4);
+	pte_t *pte = (pte_t *)(((unsigned)uvpt | (index_of_uvpd << 12)) + index_of_uvpt * 4);
+
+	// cprintf("pde: %08x, pte: %08x, *pde: %08x, *pte: %08x, err: %d\n", pde, pte, *pde, *pte, err);
+
+	if((err & FEC_WR) != FEC_WR || !PTE_READABLE(pde) || !PTE_COWABLE(pte))
+		panic("Not COW page!\n");
+
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
 	// page to the old page's address.
@@ -33,8 +51,31 @@ pgfault(struct UTrapframe *utf)
 	//   You should make three system calls.
 
 	// LAB 4: Your code here.
+	// panic("pgfault not implemented");
 
-	panic("pgfault not implemented");
+	addr = ROUNDDOWN(addr, PGSIZE);
+	/* // 分配内存并拷贝数据 */
+	/* if(sys_page_alloc(0, UTEMP, PTE_P|PTE_U|PTE_W) < 0) */
+	/* 	panic("Failed to call sys_page_alloc in pgfault!\n"); */
+	/* memcopy(UTEMP, addr, PGSIZE); */
+
+	/* // 处理映射关系 */
+	/* if(sys_page_unmap(0, addr) < 0) */
+	/* 	panic("Failed to call sys_page_unmap for addr in pgfault!\n"); */
+	/* if(sys_page_map(0, UTEMP, 0, addr, PTE_P|PTE_U|PTE_W) < 0) */
+	/* 	panic("Failed to call sys_page_map in pgfault!\n"); */
+	/* if(sys_page_unmap(0, UTEMP) < 0) */
+	/* 	panic("Failed to call sys_page_unmap for UTEMP in pgfault!\n"); */
+	if(sys_page_map(0, addr, 0, UTEMP, PTE_P|PTE_U) < 0)
+		panic("Failed to call sys_page_map in pgfault!\n");
+
+	if(sys_page_alloc(0, addr, PTE_P|PTE_U|PTE_W) < 0)
+		panic("Failed to call sys_page_alloc in pgfault!\n");
+
+	memcpy(addr, UTEMP, PGSIZE);
+
+	if(sys_page_unmap(0, UTEMP) < 0)
+		panic("Failed to call sys_page_unmap in pgfault!\n");
 }
 
 //
@@ -54,7 +95,27 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 
 	// LAB 4: Your code here.
-	panic("duppage not implemented");
+	// panic("duppage not implemented");
+	unsigned index_of_uvpd = pn / 1024;
+	unsigned index_of_uvpt = pn % 1024;
+
+	pde_t *pde = (pde_t *)((unsigned)(uvpd) + index_of_uvpd * 4);
+	pte_t *pte = (pte_t *)(((unsigned)(uvpt) | (index_of_uvpd << 12)) + index_of_uvpt * 4);
+
+	void *addr = (void *)(pn * PGSIZE);
+
+	// 处理COW和PTE_W
+	if(PTE_READABLE(pde) && PTE_READABLE(pte) && (PTE_WRITEABLE(pte) || PTE_COWABLE(pte))) {
+		if(sys_page_map(0, addr, envid, addr, PTE_P|PTE_U|PTE_COW) < 0)
+			panic("Failed to call sys_page_map for cow page for child env!\n");
+		if(sys_page_map(0, addr, 0, addr, PTE_P|PTE_U|PTE_COW) < 0)
+			panic("Failed to call sys_page_map for cow page for parent env!\n");
+	}
+	else if(PTE_READABLE(pde) && PTE_READABLE(pte)) {
+		if(sys_page_map(0, addr, envid, addr, PTE_P|PTE_U) < 0)
+			panic("Failed to call sys_page_map for read-only page!\n");
+	}
+
 	return 0;
 }
 
@@ -78,7 +139,36 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	panic("fork not implemented");
+	// panic("fork not implemented");
+	set_pgfault_handler(pgfault);
+
+	envid_t envid = 0;
+
+	// 在子进程中
+	if((envid = sys_exofork()) == 0) {
+		thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	// 在父进程中
+	if(envid < 0)
+		panic("Failed to call sys_exofork!\n");
+
+
+	// 拷贝父进程地址空间映射
+	for(uintptr_t addr = 0; addr < USTACKTOP; addr += PGSIZE)
+		duppage(envid, addr / PGSIZE);
+
+	// 为子进程创建user exception stack
+	if(sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_P|PTE_U|PTE_W) < 0)
+		panic("Failed to call sys_page_alloc for user exception stack for child env!\n");
+
+	// 设置子进程pgfault_handler
+	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
+
+	// 使子进程处于可运行状态
+	sys_env_set_status(envid, ENV_RUNNABLE);
+	return envid;
 }
 
 // Challenge!

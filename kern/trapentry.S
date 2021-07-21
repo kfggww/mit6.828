@@ -48,9 +48,60 @@
  * Lab 3: Your code here for generating entry points for the different traps.
  */
 
+	TRAPHANDLER_NOEC(divide_handler, T_DIVIDE)
 
+	TRAPHANDLER_NOEC(debug_handler, T_DEBUG)
 
+	TRAPHANDLER_NOEC(nmi_handler, T_NMI)
+
+	TRAPHANDLER_NOEC(brkpt_handler, T_BRKPT)
+
+	TRAPHANDLER_NOEC(oflow_handler, T_OFLOW)
+
+	TRAPHANDLER_NOEC(bound_handler, T_BOUND)
+
+	TRAPHANDLER_NOEC(illop_handler, T_ILLOP)
+
+	TRAPHANDLER_NOEC(device_handler, T_DEVICE)
+
+	TRAPHANDLER(dblflt_handler, T_DBLFLT)
+
+	TRAPHANDLER(tss_handler, T_TSS)
+
+	TRAPHANDLER(segnp_handler, T_SEGNP)
+
+	TRAPHANDLER(stack_handler, T_STACK)
+
+	TRAPHANDLER(gpflt_handler, T_GPFLT)
+
+	TRAPHANDLER(pgflt_handler, T_PGFLT)
+
+	TRAPHANDLER_NOEC(fperr_handler, T_FPERR)
+
+	TRAPHANDLER(align_handler, T_ALIGN)
+
+	TRAPHANDLER_NOEC(mchk_handler, T_MCHK)
+
+	TRAPHANDLER_NOEC(simderr_handler, T_SIMDERR)
+
+	TRAPHANDLER_NOEC(syscall_handler, T_SYSCALL)
+
+	TRAPHANDLER_NOEC(default_handler, T_DEFAULT)
+
+	TRAPHANDLER_NOEC(irq_timer_handler, IRQ_TIMER + IRQ_OFFSET)
 /*
  * Lab 3: Your code here for _alltraps
  */
 
+_alltraps:
+	pushl %ds
+	pushl %es
+	pushal
+/*
+ * 至此, Trapframe已经被完全压到栈中.
+ */
+	movw $(GD_KD), %ax
+	movw %ax, %ds
+	movw %ax, %es
+	pushl %esp 		/*因为trap函数的参数是一个Trapframe的指针, 此时esp刚好指向tf*/
+	call trap
