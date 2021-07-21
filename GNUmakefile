@@ -123,7 +123,8 @@ all:
 	   $(OBJDIR)/user/%.o
 
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
-USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
+# NOTE: -Wno-address-of-packed-member用于消除取对具有packed属性的结构体成员取地址的警告
+USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs -Wno-address-of-packed-member
 
 # Update .vars.X if variable X has changed since the last make run.
 #

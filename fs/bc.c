@@ -1,6 +1,9 @@
 
 #include "fs.h"
 
+extern struct Super *super;		// superblock
+extern uint32_t *bitmap;		// bitmap blocks mapped in memory
+
 // Return the virtual address of this disk block.
 void*
 diskaddr(uint32_t blockno)
@@ -39,7 +42,7 @@ bc_pgfault(struct UTrapframe *utf)
 		      utf->utf_eip, addr, utf->utf_err);
 
 	// Sanity check the block number.
-	if (super && blockno >= super->s_nblocks)
+	if (super != NULL && blockno >= super->s_nblocks)
 		panic("reading non-existent block %08x\n", blockno);
 
 	// Allocate a page in the disk map region, read the contents
@@ -57,7 +60,7 @@ bc_pgfault(struct UTrapframe *utf)
 	// Check that the block we read was allocated. (exercise for
 	// the reader: why do we do this *after* reading the block
 	// in?)
-	if (bitmap && block_is_free(blockno))
+	if (bitmap != NULL && block_is_free(blockno))
 		panic("reading free block %08x\n", blockno);
 }
 

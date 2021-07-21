@@ -3,6 +3,8 @@
 
 #include "fs.h"
 
+extern uint32_t *bitmap;
+
 static char *msg = "This is the NEW message of the day!\n\n";
 
 void

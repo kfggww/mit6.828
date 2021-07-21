@@ -11,8 +11,9 @@
 /* Maximum disk size we can handle (3GB) */
 #define DISKSIZE	0xC0000000
 
-struct Super *super;		// superblock
-uint32_t *bitmap;		// bitmap blocks mapped in memory
+// NOTE: 原来的代码有问题, 在头文件中声明了两个指针, 导致重定义错误
+// struct Super *super;		// superblock
+// uint32_t *bitmap;		// bitmap blocks mapped in memory
 
 /* ide.c */
 bool	ide_probe_disk1(void);
