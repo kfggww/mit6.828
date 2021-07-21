@@ -29,12 +29,17 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	// NOTE: 遍历envs, 找到第一个不是curenv的可运行env
+
+	// NOTE: 轮询调度, 不是每次都从第一个开始查找的, 这样会使得后面的进程饿死
+	int start = 0;
+	if(curenv != NULL)
+		start = ENVX(curenv->env_id) + 1;
+
 	for(int i = 0; i < NENV; ++i) {
-		if(curenv == NULL && envs[i].env_status == ENV_RUNNABLE)
-			env_run(&envs[i]);
-		if(&envs[i] != curenv && envs[i].env_status == ENV_RUNNABLE)
-			env_run(&envs[i]);
+		start %= NENV;
+		if(envs[start].env_status == ENV_RUNNABLE)
+			env_run(&envs[start]);
+		start += 1;
 	}
 
 	// 没有找到可以调度的进程, 则恢复当前进程的运行
