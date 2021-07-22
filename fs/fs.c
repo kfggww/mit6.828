@@ -73,7 +73,7 @@ alloc_block(void)
 			// 更新bitmap, 并刷新blockno所在的block cache到硬盘
 			blockno = i;
 			bitmap[blockno/32] &= (~(1 << (blockno % 32)));
-			flush_block(diskaddr(blockno));
+			flush_block(&bitmap[blockno/32]);
 			break;
 		}
 	}
@@ -150,7 +150,34 @@ static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
        // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+       // panic("file_block_walk not implemented");
+
+	if(filebno >= NDIRECT + NINDIRECT)
+		return -E_INVAL;
+
+	else if(filebno < NDIRECT)
+		*ppdiskbno = &f->f_direct[filebno];
+
+	else if(f->f_indirect != 0){
+		uint32_t *blk_indirect = diskaddr(f->f_indirect);
+		*ppdiskbno = &blk_indirect[filebno - NDIRECT];
+	}
+
+	else if(alloc) {
+		int r = 0;
+		if((r = alloc_block()) < 0)
+			return r;
+		f->f_indirect = r;
+		uint32_t *blk_indirect = diskaddr(f->f_indirect);
+		// 新分配的indirect block, 清空
+		memset(blk_indirect, 0, BLKSIZE);
+		*ppdiskbno = &blk_indirect[filebno - NDIRECT];
+	}
+
+	else
+		return -E_NOT_FOUND;
+
+	return 0;
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -165,7 +192,26 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
        // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+       // panic("file_get_block not implemented");
+	if(filebno >= NDIRECT+NINDIRECT)
+		return -E_INVAL;
+
+	uint32_t *pdiskno = NULL;
+	int r = 0;
+	if((r = file_block_walk(f, filebno, &pdiskno, 1)) < 0)
+		return r;
+
+	if(*pdiskno == 0) {
+		r = alloc_block();
+		if(r < 0)
+			return r;
+		*pdiskno = r;
+		memset(diskaddr(*pdiskno), 0, BLKSIZE);
+	}
+
+	*blk = diskaddr(*pdiskno);
+
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
