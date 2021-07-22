@@ -76,6 +76,10 @@ void default_handler(void);
 
 void irq_timer_handler(void);
 
+void irq_kbd_handler(void);
+
+void irq_serial_handler(void);
+
 static const char *trapname(int trapno)
 {
 	static const char * const excnames[] = {
@@ -142,6 +146,8 @@ trap_init(void)
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, syscall_handler, 3);
 	SETGATE(idt[T_DEFAULT], 0, GD_KT, default_handler, 0);
 	SETGATE(idt[IRQ_TIMER + IRQ_OFFSET], 0, GD_KT, irq_timer_handler, 0);
+	SETGATE(idt[IRQ_KBD + IRQ_OFFSET], 0, GD_KT, irq_kbd_handler, 0);
+	SETGATE(idt[IRQ_SERIAL + IRQ_OFFSET], 0, GD_KT, irq_serial_handler, 0);
 	// Per-CPU setup
 	trap_init_percpu();
 }
@@ -288,6 +294,16 @@ trap_dispatch(struct Trapframe *tf)
 
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
+
+	if(tf->tf_trapno == IRQ_OFFSET + IRQ_KBD) {
+		kbd_intr();
+		env_run(curenv);
+	}
+
+	if(tf->tf_trapno == IRQ_OFFSET + IRQ_SERIAL) {
+		serial_intr();
+		env_run(curenv);
+	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

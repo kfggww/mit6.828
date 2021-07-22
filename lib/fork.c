@@ -104,8 +104,15 @@ duppage(envid_t envid, unsigned pn)
 
 	void *addr = (void *)(pn * PGSIZE);
 
+	// 处理父子进程共享的页面
+	if(PTE_READABLE(pde) && ((*pte) & PTE_SHARE) == PTE_SHARE) {
+		if(sys_page_map(0, addr, envid, addr, PTE_SYSCALL) < 0) {
+			cprintf("pte: %08x, addr: %08x\n", *pte, addr);
+			panic("Failed to copy page mapping of PTE_SHARE!\n");
+		}
+	}
 	// 处理COW和PTE_W
-	if(PTE_READABLE(pde) && PTE_READABLE(pte) && (PTE_WRITEABLE(pte) || PTE_COWABLE(pte))) {
+	else if(PTE_READABLE(pde) && PTE_READABLE(pte) && (PTE_WRITEABLE(pte) || PTE_COWABLE(pte))) {
 		if(sys_page_map(0, addr, envid, addr, PTE_P|PTE_U|PTE_COW) < 0)
 			panic("Failed to call sys_page_map for cow page for child env!\n");
 		if(sys_page_map(0, addr, 0, addr, PTE_P|PTE_U|PTE_COW) < 0)
