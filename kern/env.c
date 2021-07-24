@@ -290,9 +290,9 @@ region_alloc(struct Env *e, void *va, size_t len)
 {
 	// LAB 3: Your code here.
 	// (But only if you need it for load_icode.)
-	// NOTE: 给[va, va + len)区间内的虚拟内存分配物理内存
-	va = ROUNDDOWN(va, PGSIZE);
+	// NOTE: 应该先计算va_end
 	void *va_end = ROUNDUP(va + len, PGSIZE);
+	va = ROUNDDOWN(va, PGSIZE);
 	for(; va < va_end; va += PGSIZE) {
 		pte_t *pte = pgdir_walk(e->env_pgdir, va, 0);
 
