@@ -113,7 +113,9 @@ boot_alloc(uint32_t n)
 		return nextfree;
 
 	n = ROUNDUP(n, PGSIZE);
-	if((uint32_t)nextfree + n > 0xffffffff)
+
+	// 此时的页表只处理了4M的映射, 所以只要超过了4M, 就应该是OOM了
+	if((uint32_t)nextfree + n > KERNBASE + 0x400000)
 		panic("out of memory!\n");
 
 	result = nextfree;
@@ -368,17 +370,21 @@ page_alloc(int alloc_flags)
 		return 0;
 
 	// 取出第一个空闲页面
-	struct PageInfo *next_free = page_free_list->pp_link;
-	struct PageInfo *cur_free = page_free_list;
-	cur_free->pp_link = NULL; // 页面已经被分配出去, 从空闲列表中移除
+	struct PageInfo *new_free = page_free_list->pp_link;
+	struct PageInfo *old_free = page_free_list;
+	old_free->pp_link = NULL; // 页面已经被分配出去, 从空闲列表中移除
 
 	// 根据需要清空页面
+	// NOTE: JOS能够处理的最大物理内存就是256M, 数值上等于内核的虚拟地址空间大小
+	// 实际操作发现, 当把qemu的物理内存设置成4G大小时, 管理这些页面需要的pages数据
+	// 结构会超过最初设置的临时页表的管理范围, 在启动过程中产生缺页中断, 系统死机
+	// NOTE: 物理内存的一个页面在内核的虚地址空间中一定可以找到一个对应的页面
 	if(alloc_flags & ALLOC_ZERO)
-		memset(page2kva(cur_free), 0, PGSIZE);
+		memset(page2kva(old_free), 0, PGSIZE);
 
 	// 更新空闲页面列表
-	page_free_list = next_free;
-	return cur_free;
+	page_free_list = new_free;
+	return old_free;
 }
 
 //
@@ -473,6 +479,11 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
+	// NOTE: 确保参数满足要求
+	assert(size % PGSIZE == 0);
+	assert(va % PGSIZE == 0);
+	assert(pa % PGSIZE == 0);
+
 	// Fill this function in
 	for(size_t i = 0; i < size; i += PGSIZE) {
 		pte_t *pte = pgdir_walk(pgdir, (void *)va, 1);
