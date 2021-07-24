@@ -385,7 +385,8 @@ load_icode(struct Env *e, uint8_t *binary)
 		}
 		region_alloc(e, (void*)(ph->p_va), ph->p_memsz); //在env的虚拟地址空间中分配空间
 		memcpy((void*)(ph->p_va), (void*)(binary+ph->p_offset), ph->p_filesz);
-		memset((void*)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+		if(ph->p_memsz > ph->p_filesz)
+			memset((void*)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 		ph++;
 	}
 	// Now map one page for the program's initial stack

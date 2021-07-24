@@ -354,6 +354,8 @@ trap(struct Trapframe *tf)
 		// Copy trap frame (which is currently on the stack)
 		// into 'curenv->env_tf', so that running the environment
 		// will restart at the trap point.
+		// NOTE: 因为tf指向的地址保存了curenv进入内核时的状态, curenv的env_tf原来的值已经无效了
+		// 只有使用新的tf, curenv才能回到正确的位置处继续执行.
 		curenv->env_tf = *tf;
 		// The trapframe on the stack should be ignored from here on.
 		tf = &curenv->env_tf;
@@ -434,6 +436,8 @@ page_fault_handler(struct Trapframe *tf)
 		struct UTrapframe *utf;
 
 		// TODO: 为什么在嵌套的情况下需要留一个大于4字节的间隙???
+		// NOTE: 因为在嵌套的情况下, 使用的都是user exception stack, 这个间隙是用来保存ret的返回地址的,
+		// 如果不留间隙, 那么ret的返回地址就会覆盖esp的值, 导致栈切换出错.
 		if(tf->tf_esp <= UXSTACKTOP && tf->tf_esp >= UXSTACKTOP - PGSIZE)
 			utf = (struct UTrapframe *)(tf->tf_esp - 4 - sizeof(struct UTrapframe));
 		else
