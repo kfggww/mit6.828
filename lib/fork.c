@@ -54,18 +54,7 @@ pgfault(struct UTrapframe *utf)
 	// panic("pgfault not implemented");
 
 	addr = ROUNDDOWN(addr, PGSIZE);
-	/* // 分配内存并拷贝数据 */
-	/* if(sys_page_alloc(0, UTEMP, PTE_P|PTE_U|PTE_W) < 0) */
-	/* 	panic("Failed to call sys_page_alloc in pgfault!\n"); */
-	/* memcopy(UTEMP, addr, PGSIZE); */
 
-	/* // 处理映射关系 */
-	/* if(sys_page_unmap(0, addr) < 0) */
-	/* 	panic("Failed to call sys_page_unmap for addr in pgfault!\n"); */
-	/* if(sys_page_map(0, UTEMP, 0, addr, PTE_P|PTE_U|PTE_W) < 0) */
-	/* 	panic("Failed to call sys_page_map in pgfault!\n"); */
-	/* if(sys_page_unmap(0, UTEMP) < 0) */
-	/* 	panic("Failed to call sys_page_unmap for UTEMP in pgfault!\n"); */
 	if(sys_page_map(0, addr, 0, UTEMP, PTE_P|PTE_U) < 0)
 		panic("Failed to call sys_page_map in pgfault!\n");
 

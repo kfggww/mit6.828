@@ -212,7 +212,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 
 	// 检查权限
 	if((perm & (PTE_U | PTE_P))!= (PTE_U | PTE_P) ||
-	   ((perm & ~(PTE_U | PTE_P | PTE_AVAIL | PTE_W)) != 0))
+	   ((perm & ~PTE_SYSCALL) != 0))
 		return -E_INVAL;
 
 	// 检查va
@@ -229,7 +229,6 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	if((pp = page_alloc(ALLOC_ZERO)) == NULL)
 		return -E_NO_MEM;
 
-	page_remove(env->env_pgdir, va);
 	if(page_insert(env->env_pgdir, pp, va, perm) < 0)
 		return -E_NO_MEM;
 
@@ -287,7 +286,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	if((perm & PTE_W) == PTE_W && (*pte & PTE_W) != PTE_W)
 		return -E_INVAL;
 	if((perm & (PTE_U | PTE_P))!= (PTE_U | PTE_P) ||
-	   ((perm & ~(PTE_U | PTE_P | PTE_AVAIL | PTE_W)) != 0))
+	   ((perm & ~PTE_SYSCALL) != 0))
 		return -E_INVAL;
 
 	// 复制映射
